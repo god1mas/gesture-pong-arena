@@ -1,40 +1,106 @@
-# 🏓 Hand-Tracking 2D Pong
+# Gesture Pong Arena
 
-A modern, interactive twist on the classic arcade game Pong! This browser-based game uses your webcam and **Google's MediaPipe Hands** to let you control your paddle entirely through hand gestures. No mouse or keyboard required to play!
+Gesture Pong Arena is an interactive, webcam-controlled Pong game. Move your index finger in front of the camera to control the player paddle, compete against an AI opponent, and customize each match with difficulty and winning-score settings.
 
-**[🎮 Play the Live Demo Here!](https://alyhxn.github.io/hand-tracking-pong/)**
+The project uses **HTML**, **CSS**, **Vanilla JavaScript**, **HTML5 Canvas**, and **MediaPipe Hands**. Camera processing stays in the browser; the application does not record or upload webcam footage.
 
-## 📸 Screenshot
+## Features
 
-![Hand-Tracking Pong Gameplay](/screenshot.png)
+- Webcam-based paddle control using hand landmarks.
+- Real-time camera and hand-tracking status.
+- Modern, responsive arcade interface.
+- AI opponent with Easy, Normal, and Hard difficulty levels.
+- First to 5 or First to 10 winning conditions.
+- Match result overlay with final score and outcome.
+- Play Again and Restart Match controls.
+- Start, pause, and resume states with the `P` keyboard shortcut.
+- Horizontal and vertical arena modes.
+- Player and AI side switching.
+- Camera preview toggle while hand tracking remains active.
+- Fullscreen gameplay.
+- Procedurally generated sound effects using the Web Audio API.
 
-## ✨ Features
+## Getting Started
 
-* **🖐️ Hand Gesture Controls:** Uses your webcam to track your index finger in real-time to move the paddle.
-* **🤖 AI Opponent:** Play against an automated, dynamic AI paddle.
-* **🔄 Rotatable Layouts:** Switch seamlessly between traditional Horizontal mode and a modern Vertical mode.
-* **🔀 Switch Sides:** Swap the player and AI sides on the fly.
-* **🎵 Native Retro Audio:** Procedurally generated 8-bit sound effects (beeps, boops, and score chimes) using the browser's native Web Audio API—no external audio files needed!
-* **⌨️ Keyboard Shortcuts:** Press `P` to instantly Play or Pause the game.
-* **📺 Fullscreen Support:** Immersive edge-to-edge gameplay.
+### Requirements
 
-## 🕹️ How to Play
+- A modern browser with webcam and WebAssembly support, preferably Chrome or Edge.
+- A webcam and permission to access it.
+- An internet connection to load MediaPipe Hands and its model files from the CDN.
+- VS Code with the Live Server extension, or Python for a local HTTP server.
 
-1. **Allow Camera Access:** When you open the game, your browser will ask for permission to use your webcam. You must allow this to play.
-2. **Step Back:** Make sure your hand is clearly visible in the webcam footage window.
-3. **Start the Game:** Click the **Start** button or press **`P`** on your keyboard.
-4. **Move Your Hand:** Move your hand up/down or left/right (depending on the layout) to control your green paddle. 
-5. **Score Points:** Hit the ball past the red AI paddle to score points!
+### Clone the repository
 
-## 🛠️ Built With
+```bash
+git clone https://github.com/god1mas/gesture-pong-arena.git
+cd gesture-pong-arena
+```
 
-* **HTML5 Canvas:** For rendering the game board, paddles, and ball.
-* **Vanilla JavaScript:** Core game logic and physics.
-* **[MediaPipe Hands](https://google.github.io/mediapipe/solutions/hands.html):** For lightweight, real-time hand-tracking directly in the browser.
-* **Web Audio API:** For zero-latency, synthesized sound effects.
+### Run with VS Code Live Server
 
-## 🤝 Contributing
-Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
+1. Open the project folder in VS Code.
+2. Open `index.html`.
+3. Select **Open with Live Server** or click **Go Live**.
+4. Open the local URL provided by Live Server.
 
-## 📄 License
-This project is open-source and available under the MIT License.
+### Run with a local HTTP server
+
+```bash
+python -m http.server 4173
+```
+
+Open `http://localhost:4173` in your browser.
+
+When prompted, allow camera access. Run the project through `localhost` or `127.0.0.1` instead of opening `index.html` directly with a `file://` URL.
+
+## How to Play
+
+1. Choose an AI difficulty: **Easy**, **Normal**, or **Hard**.
+2. Select a winning score: **5 Points** or **10 Points**.
+3. Keep one hand clearly visible in the camera frame.
+4. Select **Start** or press `P`.
+5. Move your index finger to guide the blue player paddle.
+6. Send the ball past the purple AI paddle to score.
+7. The first side to reach the selected score wins the match.
+
+Use **Play Again** to start another match with the same settings. Use **Restart Match** to reset the score to 0–0 and unlock the match settings. The toolbar also provides controls for arena rotation, side switching, camera preview, and fullscreen mode.
+
+## Project Structure
+
+```text
+gesture-pong-arena/
+├── index.html       # Application layout, controls, settings, and overlays
+├── style.css        # Responsive arcade UI and component styling
+├── script.js        # MediaPipe integration, rendering, game logic, and AI
+├── screenshot.png   # Screenshot asset inherited from the original project
+├── README.md        # Project documentation
+└── LICENSE          # Original MIT License and copyright notice
+```
+
+## Development Changes
+
+### Phase 1 — UI and Tracking Status
+
+- Redesigned the interface as Gesture Pong Arena.
+- Added a responsive scoreboard, toolbar, sensor panel, and playing guide.
+- Added real-time camera and hand-detection states with debouncing.
+- Updated Canvas visuals while retaining the existing ball physics and collision system.
+
+### Phase 2 — Difficulty and Winning System
+
+- Added centralized Easy, Normal, and Hard AI configurations.
+- Added First to 5 and First to 10 match targets.
+- Added explicit idle, playing, paused, and finished match states.
+- Added match results, final scores, Play Again, Restart Match, and settings locking.
+
+## Credits and Attribution
+
+This project is based on the open-source [Hand-Tracking Pong project by alyhxn](https://github.com/alyhxn/hand-tracking-pong).
+
+It extends and modifies the original project and was not created entirely from scratch. The original game architecture, MediaPipe-based controls, and other foundational work remain credited to the original author.
+
+## License
+
+This project is distributed under the MIT License used by the original repository. The original copyright notice and license text are preserved in [LICENSE](LICENSE).
+
+The presence of modifications and additional features does not constitute a claim of ownership over the entire original source code.

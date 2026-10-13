@@ -3,32 +3,158 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MediaPipe Hands - 2D Pong Custom Layouts</title>
-    
+    <meta name="theme-color" content="#0B1020">
+    <meta name="description" content="Gesture Pong Arena — play a modern game of Pong using real-time hand tracking.">
+    <title>Gesture Pong Arena</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230B1020'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%2338BDF8'/%3E%3C/svg%3E">
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <main class="app-shell">
+        <header class="site-header">
+            <div class="brand-mark" aria-hidden="true"><span></span><span></span></div>
+            <div>
+                <p class="eyebrow">Motion-controlled arcade</p>
+                <h1>GESTURE PONG ARENA</h1>
+                <p class="subtitle">Play Pong With Your Hand</p>
+            </div>
+        </header>
 
-    <h2>2D Pong (Vertical/Horizontal Modes)</h2>
+        <section class="game-layout" aria-label="Gesture Pong game">
+            <div class="arena-panel">
+                <div class="scoreboard" aria-label="Current score">
+                    <div class="score score-player">
+                        <span class="score-label"><i></i>Player</span>
+                        <strong id="player-score">0</strong>
+                    </div>
+                    <div class="versus" aria-label="Active match settings">
+                        <span>VS</span>
+                        <small><b id="active-difficulty">Normal</b> · First to <b id="active-target">5</b></small>
+                    </div>
+                    <div class="score score-ai">
+                        <strong id="ai-score">0</strong>
+                        <span class="score-label">AI<i></i></span>
+                    </div>
+                </div>
 
-    <div class="controls-bar">
-        <button id="btn-playpause">Start (P)</button>
-        <button id="btn-footage">Toggle Footage</button>
-        <button id="btn-mode">Rotate Screen</button>
-        <button id="btn-switch">Switch Sides</button>
-        <button id="btn-fullscreen">Fullscreen</button>
-    </div>
-    
-    <div class="container">
-        <video class="input_video" width="640" height="480" autoplay playsinline></video>
-        <canvas class="output_canvas" width="640" height="480"></canvas>
-    </div>
-    
+                <div class="canvas-frame">
+                    <video class="input_video" width="640" height="480" autoplay playsinline muted></video>
+                    <canvas class="output_canvas" width="640" height="480" aria-label="Gesture Pong game arena"></canvas>
+                    <div class="live-badge" id="live-badge" data-state="initializing" aria-hidden="true"><span></span><b>Sensor starting</b></div>
+                    <div class="result-overlay" id="result-overlay" role="dialog" aria-modal="true" aria-labelledby="result-title" hidden>
+                        <div class="result-card">
+                            <p class="result-kicker">Match complete</p>
+                            <h2 id="result-title">YOU WIN!</h2>
+                            <p class="final-score-label">Final Score</p>
+                            <p class="final-score"><strong id="final-player-score">5</strong><span>—</span><strong id="final-ai-score">0</strong></p>
+                            <p class="result-meta" id="result-meta">Normal · First to 5</p>
+                            <div class="result-actions">
+                                <button class="result-button result-button-primary" id="btn-play-again" type="button">Play Again</button>
+                                <button class="result-button" id="btn-match-settings" type="button">Match Settings</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="controls-bar" role="toolbar" aria-label="Game controls">
+                    <button class="control-button control-primary" id="btn-playpause" type="button" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="play-icon" d="M8 5v14l11-7z"/><path class="pause-icon" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+                        <span>Start</span><kbd>P</kbd>
+                    </button>
+                    <button class="control-button" id="btn-mode" type="button" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm5 16h.01"/></svg>
+                        <span>Rotate Screen</span>
+                    </button>
+                    <button class="control-button" id="btn-switch" type="button">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7-4 4 4 4M3 11h14a4 4 0 0 1 4 4v1M17 17l4-4-4-4"/></svg>
+                        <span>Switch Sides</span>
+                    </button>
+                    <button class="control-button" id="btn-footage" type="button" aria-pressed="true">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l4.6-3.1A1 1 0 0 1 21 7.7v8.6a1 1 0 0 1-1.4.8L15 14M4 5h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg>
+                        <span>Hide Camera</span>
+                    </button>
+                    <button class="control-button" id="btn-fullscreen" type="button">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+                        <span>Fullscreen</span>
+                    </button>
+                </div>
+            </div>
+
+            <aside class="info-column">
+                <section class="info-card settings-card" aria-labelledby="settings-title">
+                    <div class="card-heading settings-heading">
+                        <div><p class="card-kicker">Match setup</p><h2 id="settings-title">Game Settings</h2></div>
+                        <span class="settings-state" id="settings-state">Ready</span>
+                    </div>
+
+                    <fieldset class="setting-group" id="difficulty-settings">
+                        <legend>Difficulty</legend>
+                        <div class="segmented-control segmented-control-three">
+                            <label><input type="radio" name="difficulty" value="easy"><span>Easy</span></label>
+                            <label><input type="radio" name="difficulty" value="normal" checked><span>Normal</span></label>
+                            <label><input type="radio" name="difficulty" value="hard"><span>Hard</span></label>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="setting-group" id="score-settings">
+                        <legend>Winning Score</legend>
+                        <div class="segmented-control">
+                            <label><input type="radio" name="winning-score" value="5" checked><span>5 Points</span></label>
+                            <label><input type="radio" name="winning-score" value="10"><span>10 Points</span></label>
+                        </div>
+                    </fieldset>
+
+                    <button class="restart-button" id="btn-restart" type="button">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6M5.6 15A7 7 0 0 0 18 17M18.4 9A7 7 0 0 0 6 7"/></svg>
+                        Restart Match
+                    </button>
+                    <p class="settings-note" id="settings-note">Settings lock when the match starts.</p>
+                </section>
+
+                <section class="info-card tracking-card" aria-labelledby="tracking-title">
+                    <div class="card-heading">
+                        <div><p class="card-kicker">Sensor</p><h2 id="tracking-title">Tracking Status</h2></div>
+                        <span class="status-pulse" aria-hidden="true"></span>
+                    </div>
+                    <div class="tracking-status" id="tracking-status" data-state="initializing" role="status" aria-live="polite">
+                        <div class="status-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v4h1V6a2 2 0 0 1 4 0v7a8 8 0 0 1-16 0V9a2 2 0 0 1 4 0V5a2 2 0 0 1 4 0v4"/></svg>
+                        </div>
+                        <div>
+                            <strong id="status-label">Camera Initializing</strong>
+                            <p id="status-message">Allow camera access while the sensor gets ready.</p>
+                        </div>
+                    </div>
+                    <div class="privacy-note">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 2.9 8.7 7 10 4.1-1.3 7-5.4 7-10V6l-7-3zm-3 9 2 2 4-4"/></svg>
+                        <span>Video stays in your browser. Nothing is recorded or uploaded.</span>
+                    </div>
+                </section>
+
+                <section class="info-card how-to-card" aria-labelledby="how-to-title">
+                    <div class="card-heading">
+                        <div><p class="card-kicker">Quick guide</p><h2 id="how-to-title">How to Play</h2></div>
+                    </div>
+                    <ol class="steps">
+                        <li><span>01</span><p>Keep one hand clearly visible inside the camera frame.</p></li>
+                        <li><span>02</span><p>Move your index finger to guide the blue paddle.</p></li>
+                        <li><span>03</span><p>Press <strong>Start</strong> or <kbd>P</kbd>, then defend your side.</p></li>
+                    </ol>
+                </section>
+            </aside>
+        </section>
+
+        <footer class="site-footer">
+            <span>Camera required for gesture control</span><span class="footer-divider" aria-hidden="true"></span><span>Best played in a well-lit space</span>
+        </footer>
+    </main>
+
     <script src="script.js"></script>
 </body>
 </html>
