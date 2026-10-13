@@ -13,6 +13,9 @@ The project uses **HTML**, **CSS**, **Vanilla JavaScript**, **HTML5 Canvas**, an
 - First to 5 or First to 10 winning conditions.
 - Match result overlay with final score and outcome.
 - Play Again and Restart Match controls.
+- 3, 2, 1, GO! countdown with pause-and-resume support.
+- Bounded ball trails, collision particles, and score feedback.
+- Persistent mute control for all generated sound effects.
 - Start, pause, and resume states with the `P` keyboard shortcut.
 - Horizontal and vertical arena modes.
 - Player and AI side switching.
@@ -63,7 +66,7 @@ When prompted, allow camera access. Run the project through `localhost` or `127.
 6. Send the ball past the purple AI paddle to score.
 7. The first side to reach the selected score wins the match.
 
-Use **Play Again** to start another match with the same settings. Use **Restart Match** to reset the score to 0–0 and unlock the match settings. The toolbar also provides controls for arena rotation, side switching, camera preview, and fullscreen mode.
+Use **Play Again** to start another match with the same settings. Use **Restart Match** to reset the score to 0–0 and unlock the match settings. The toolbar also provides controls for arena rotation, side switching, camera preview, sound, and fullscreen mode.
 
 ## Project Structure
 
@@ -92,6 +95,13 @@ gesture-pong-arena/
 - Added First to 5 and First to 10 match targets.
 - Added explicit idle, playing, paused, and finished match states.
 - Added match results, final scores, Play Again, Restart Match, and settings locking.
+
+### Phase 3 — Countdown and Gameplay Polish
+
+- Added a frame-driven 3, 2, 1, GO! countdown that safely pauses, resumes, and cancels.
+- Added bounded ball trails, paddle and wall impact effects, and scorer highlights.
+- Added an accessible mute control with a safely persisted browser preference.
+- Added score announcements without interfering with the match result overlay.
 
 ## Credits and Attribution
 

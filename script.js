@@ -26,6 +26,10 @@ const activeTargetElement = document.getElementById('active-target');
 const settingsCardElement = document.querySelector('.settings-card');
 const settingsStateElement = document.getElementById('settings-state');
 const settingsNoteElement = document.getElementById('settings-note');
+const audioButton = document.getElementById('btn-audio');
+const scoreFeedbackElement = document.getElementById('score-feedback');
+const playerScoreContainer = document.querySelector('.score-player');
+const aiScoreContainer = document.querySelector('.score-ai');
 const difficultyInputs = [...document.querySelectorAll('input[name="difficulty"]')];
 const winningScoreInputs = [...document.querySelectorAll('input[name="winning-score"]')];
 
@@ -126,14 +130,46 @@ function getCameraErrorMessage(error) {
 // --- AUDIO SYSTEM (Web Audio API) ---
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
+let audioMasterGain;
+const AUDIO_PREFERENCE_KEY = 'gesture-pong-muted';
+let isMuted = readMutePreference();
+
+function readMutePreference() {
+    try {
+        return window.localStorage.getItem(AUDIO_PREFERENCE_KEY) === 'true';
+    } catch (error) {
+        return false;
+    }
+}
+
+function saveMutePreference() {
+    try {
+        window.localStorage.setItem(AUDIO_PREFERENCE_KEY, String(isMuted));
+    } catch (error) {
+        // Storage can be unavailable in privacy modes; audio still works for this session.
+    }
+}
+
+function syncAudioControl() {
+    audioButton.classList.toggle('is-muted', isMuted);
+    audioButton.setAttribute('aria-pressed', String(isMuted));
+    audioButton.setAttribute('aria-label', isMuted ? 'Unmute sound' : 'Mute sound');
+    audioButton.querySelector('span').textContent = isMuted ? 'Muted' : 'Sound On';
+}
 
 function initAudio() {
-    if (!audioCtx) audioCtx = new AudioContext();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (!AudioContext || isMuted) return;
+    if (!audioCtx) {
+        audioCtx = new AudioContext();
+        audioMasterGain = audioCtx.createGain();
+        audioMasterGain.gain.value = 1;
+        audioMasterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
 }
 
 function playTone(freq, type, duration, vol = 0.1, freqSweep = null) {
-    if (!audioCtx) return;
+    if (!audioCtx || !audioMasterGain || isMuted) return;
     const oscillator = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
 
@@ -148,7 +184,7 @@ function playTone(freq, type, duration, vol = 0.1, freqSweep = null) {
     gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
 
     oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
+    gainNode.connect(audioMasterGain);
 
     oscillator.start();
     oscillator.stop(audioCtx.currentTime + duration);
@@ -166,6 +202,17 @@ const sfx = {
     aiScore: () => playTone(150, 'sawtooth', 0.4, 0.2, 50),
     start: () => playTone(400, 'square', 0.3, 0.1, 800)
 };
+
+function setMuted(nextMuted) {
+    isMuted = Boolean(nextMuted);
+    if (!isMuted) initAudio();
+    if (audioCtx && audioMasterGain) {
+        audioMasterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        audioMasterGain.gain.setTargetAtTime(isMuted ? 0 : 1, audioCtx.currentTime, 0.01);
+    }
+    saveMutePreference();
+    syncAudioControl();
+}
 
 // --- FEATURE STATES ---
 let showFootage = true;
@@ -210,6 +257,15 @@ let matchState = MATCH_STATES.IDLE;
 let activeDifficulty = 'normal';
 let winningScore = 5;
 
+const COUNTDOWN_STEPS = Object.freeze(['3', '2', '1', 'GO!']);
+const COUNTDOWN_STEP_DURATION = 700;
+const countdown = {
+    active: false,
+    stepIndex: 0,
+    stepElapsed: 0,
+    lastUpdatedAt: 0
+};
+
 const PADDLE_LONG = 100;
 const PADDLE_SHORT = 20;
 
@@ -227,8 +283,11 @@ playPauseButton.addEventListener('click', () => {
     initAudio();
     if (matchState === MATCH_STATES.PLAYING) {
         setMatchState(MATCH_STATES.PAUSED);
-    } else {
+    } else if (matchState === MATCH_STATES.PAUSED) {
         setMatchState(MATCH_STATES.PLAYING);
+        sfx.start();
+    } else {
+        beginCountdown();
         sfx.start();
     }
 });
@@ -240,6 +299,7 @@ footageButton.addEventListener('click', () => {
 });
 
 modeButton.addEventListener('click', () => {
+    cancelCountdown();
     isVertical = !isVertical;
     modeButton.setAttribute('aria-pressed', String(isVertical));
     modeButton.setAttribute('aria-label', isVertical ? 'Rotate screen to horizontal mode' : 'Rotate screen to vertical mode');
@@ -248,8 +308,13 @@ modeButton.addEventListener('click', () => {
 });
 
 switchSidesButton.addEventListener('click', () => {
+    cancelCountdown();
     isSwapped = !isSwapped;
     resetGame();
+});
+
+audioButton.addEventListener('click', () => {
+    setMuted(!isMuted);
 });
 
 difficultyInputs.forEach((input) => {
@@ -325,6 +390,191 @@ const ai = {
     lastDecisionAt: 0
 };
 
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const MAX_TRAIL_POINTS = 14;
+const MAX_PARTICLES = 42;
+const MAX_IMPACT_PULSES = 8;
+const ballTrail = [];
+const particles = [];
+const impactPulses = [];
+let lastFrameAt = 0;
+let scoreFeedbackRemaining = 0;
+
+function beginCountdown() {
+    clearScoreFeedback();
+    clearGameplayEffects();
+    countdown.active = true;
+    countdown.stepIndex = 0;
+    countdown.stepElapsed = 0;
+    countdown.lastUpdatedAt = performance.now();
+    setMatchState(MATCH_STATES.PLAYING);
+}
+
+function cancelCountdown() {
+    countdown.active = false;
+    countdown.stepIndex = 0;
+    countdown.stepElapsed = 0;
+    countdown.lastUpdatedAt = 0;
+}
+
+function updateCountdown(now) {
+    if (!countdown.active) return;
+
+    if (matchState !== MATCH_STATES.PLAYING) {
+        countdown.lastUpdatedAt = now;
+        return;
+    }
+
+    const elapsed = countdown.lastUpdatedAt ? now - countdown.lastUpdatedAt : 0;
+    countdown.lastUpdatedAt = now;
+    countdown.stepElapsed += Math.min(Math.max(elapsed, 0), 100);
+
+    if (countdown.stepElapsed < COUNTDOWN_STEP_DURATION) return;
+
+    countdown.stepElapsed -= COUNTDOWN_STEP_DURATION;
+    countdown.stepIndex += 1;
+    if (countdown.stepIndex >= COUNTDOWN_STEPS.length) {
+        cancelCountdown();
+    }
+}
+
+function drawCountdown() {
+    if (!countdown.active) return;
+
+    const progress = clamp(countdown.stepElapsed / COUNTDOWN_STEP_DURATION, 0, 1);
+    const pulse = prefersReducedMotion.matches ? 1 : 0.88 + Math.sin(progress * Math.PI) * 0.14;
+    const opacity = prefersReducedMotion.matches ? 1 : clamp(1 - Math.max(0, progress - 0.72) / 0.28, 0, 1);
+    const label = COUNTDOWN_STEPS[countdown.stepIndex];
+
+    canvasCtx.save();
+    canvasCtx.fillStyle = 'rgba(5, 9, 20, 0.28)';
+    canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+    canvasCtx.translate(canvasElement.width / 2, canvasElement.height / 2);
+    canvasCtx.scale(pulse, pulse);
+    canvasCtx.globalAlpha = opacity;
+    canvasCtx.textAlign = 'center';
+    canvasCtx.textBaseline = 'middle';
+    canvasCtx.font = `800 ${label === 'GO!' ? 74 : 92}px Inter, system-ui, sans-serif`;
+    canvasCtx.fillStyle = label === 'GO!' ? '#38bdf8' : '#f8fafc';
+    canvasCtx.shadowBlur = 24;
+    canvasCtx.shadowColor = label === 'GO!' ? 'rgba(56, 189, 248, 0.72)' : 'rgba(167, 139, 250, 0.48)';
+    canvasCtx.fillText(label, 0, 0);
+    canvasCtx.restore();
+}
+
+function clearGameplayEffects() {
+    ballTrail.length = 0;
+    particles.length = 0;
+    impactPulses.length = 0;
+}
+
+function spawnImpact(x, y, color, strength = 1) {
+    if (prefersReducedMotion.matches) return;
+
+    if (impactPulses.length >= MAX_IMPACT_PULSES) impactPulses.shift();
+    impactPulses.push({ x, y, radius: 9, life: 1, color });
+
+    const available = MAX_PARTICLES - particles.length;
+    const count = Math.min(available, Math.round(5 + strength * 2));
+    for (let i = 0; i < count; i += 1) {
+        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.45;
+        const speed = 42 + Math.random() * 58 * strength;
+        particles.push({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            radius: 1.2 + Math.random() * 1.8,
+            life: 1,
+            color
+        });
+    }
+}
+
+function updateGameplayEffects(deltaMs) {
+    const deltaSeconds = Math.min(deltaMs, 100) / 1000;
+
+    for (let i = particles.length - 1; i >= 0; i -= 1) {
+        const particle = particles[i];
+        particle.x += particle.vx * deltaSeconds;
+        particle.y += particle.vy * deltaSeconds;
+        particle.life -= deltaSeconds * 3.5;
+        if (particle.life <= 0) particles.splice(i, 1);
+    }
+
+    for (let i = impactPulses.length - 1; i >= 0; i -= 1) {
+        const pulse = impactPulses[i];
+        pulse.radius += deltaSeconds * 55;
+        pulse.life -= deltaSeconds * 4;
+        if (pulse.life <= 0) impactPulses.splice(i, 1);
+    }
+
+    if (scoreFeedbackRemaining > 0) {
+        scoreFeedbackRemaining -= Math.min(deltaMs, 100);
+        if (scoreFeedbackRemaining <= 0) clearScoreFeedback();
+    }
+}
+
+function captureBallTrail() {
+    if (prefersReducedMotion.matches || countdown.active || matchState !== MATCH_STATES.PLAYING) return;
+    if (ballTrail.length >= MAX_TRAIL_POINTS) ballTrail.shift();
+    ballTrail.push({ x: ball.x, y: ball.y, speed: ball.speed });
+}
+
+function drawGameplayEffects() {
+    if (ballTrail.length > 1) {
+        for (let i = 0; i < ballTrail.length; i += 1) {
+            const point = ballTrail[i];
+            const progress = (i + 1) / ballTrail.length;
+            const speedRatio = clamp((point.speed - ball.minSpeed) / (ball.maxSpeed - ball.minSpeed), 0, 1);
+            canvasCtx.beginPath();
+            canvasCtx.arc(point.x, point.y, ball.radius * (0.2 + progress * 0.55), 0, Math.PI * 2);
+            canvasCtx.fillStyle = `rgba(${speedRatio > 0.55 ? '167, 139, 250' : '56, 189, 248'}, ${progress * 0.22})`;
+            canvasCtx.fill();
+        }
+    }
+
+    impactPulses.forEach((pulse) => {
+        canvasCtx.beginPath();
+        canvasCtx.arc(pulse.x, pulse.y, pulse.radius, 0, Math.PI * 2);
+        canvasCtx.strokeStyle = pulse.color;
+        canvasCtx.globalAlpha = pulse.life * 0.55;
+        canvasCtx.lineWidth = 2;
+        canvasCtx.stroke();
+    });
+
+    particles.forEach((particle) => {
+        canvasCtx.beginPath();
+        canvasCtx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+        canvasCtx.fillStyle = particle.color;
+        canvasCtx.globalAlpha = particle.life * 0.8;
+        canvasCtx.fill();
+    });
+    canvasCtx.globalAlpha = 1;
+}
+
+function showScoreFeedback(scorer) {
+    const isPlayer = scorer === 'player';
+    scoreFeedbackElement.textContent = isPlayer ? 'PLAYER SCORES!' : 'AI SCORES!';
+    scoreFeedbackElement.dataset.scorer = scorer;
+    scoreFeedbackElement.hidden = false;
+    scoreFeedbackRemaining = 900;
+
+    const scoreContainer = isPlayer ? playerScoreContainer : aiScoreContainer;
+    playerScoreContainer.classList.remove('is-scoring');
+    aiScoreContainer.classList.remove('is-scoring');
+    void scoreContainer.offsetWidth;
+    scoreContainer.classList.add('is-scoring');
+}
+
+function clearScoreFeedback() {
+    scoreFeedbackRemaining = 0;
+    scoreFeedbackElement.hidden = true;
+    scoreFeedbackElement.removeAttribute('data-scorer');
+    playerScoreContainer.classList.remove('is-scoring');
+    aiScoreContainer.classList.remove('is-scoring');
+}
+
 function syncScoreboard() {
     if (playerScoreElement.textContent !== String(player.score)) {
         playerScoreElement.textContent = player.score;
@@ -362,6 +612,7 @@ function setMatchState(nextState) {
     if (!Object.values(MATCH_STATES).includes(nextState)) return;
 
     matchState = nextState;
+    if (countdown.active) countdown.lastUpdatedAt = performance.now();
     const isPlaying = matchState === MATCH_STATES.PLAYING;
     const isFinished = matchState === MATCH_STATES.FINISHED;
     const buttonLabels = {
@@ -386,6 +637,8 @@ function hideResultOverlay() {
 }
 
 function finishMatch(winner) {
+    cancelCountdown();
+    clearScoreFeedback();
     setMatchState(MATCH_STATES.FINISHED);
     resultTitleElement.textContent = winner === 'player' ? 'YOU WIN!' : 'YOU LOSE!';
     finalPlayerScoreElement.textContent = player.score;
@@ -415,6 +668,7 @@ function awardPoint(scorer) {
         return true;
     }
 
+    showScoreFeedback(scorer);
     resetBall();
     return false;
 }
@@ -451,6 +705,7 @@ function updatePaddleDimensions() {
 }
 
 function resetGame() {
+    clearScoreFeedback();
     player.score = 0;
     ai.score = 0;
     syncScoreboard();
@@ -458,15 +713,19 @@ function resetGame() {
 }
 
 function restartMatch(startPlaying) {
+    cancelCountdown();
+    clearScoreFeedback();
     player.score = 0;
     ai.score = 0;
     syncScoreboard();
     hideResultOverlay();
     resetBall();
-    setMatchState(startPlaying ? MATCH_STATES.PLAYING : MATCH_STATES.IDLE);
+    setMatchState(MATCH_STATES.IDLE);
+    if (startPlaying) beginCountdown();
 }
 
 function resetBall() {
+    clearGameplayEffects();
     ball.x = canvasElement.width / 2;
     ball.y = canvasElement.height / 2;
     ball.speed = ball.minSpeed;
@@ -499,7 +758,7 @@ function getBallColor(currentSpeed, min, max) {
     }
 }
 
-function handleRectCollision(rectCenterX, rectCenterY, rectWidth, rectHeight, paddleVelocityX, paddleVelocityY) {
+function handleRectCollision(rectCenterX, rectCenterY, rectWidth, rectHeight, paddleVelocityX, paddleVelocityY, impactColor) {
     const left = rectCenterX - rectWidth / 2;
     const right = rectCenterX + rectWidth / 2;
     const top = rectCenterY - rectHeight / 2;
@@ -526,7 +785,10 @@ function handleRectCollision(rectCenterX, rectCenterY, rectWidth, rectHeight, pa
         else if (minOverlap === overlapTop) { ball.y = top - ball.radius; ball.vy = -Math.abs(ball.vy); bounced = true; }
         else if (minOverlap === overlapBottom) { ball.y = bottom + ball.radius; ball.vy = Math.abs(ball.vy); bounced = true; }
 
-        if (bounced) sfx.paddle();
+        if (bounced) {
+            sfx.paddle();
+            spawnImpact(ball.x, ball.y, impactColor, 1.15);
+        }
 
         ball.vx += paddleVelocityX * 0.7;
         ball.vy += paddleVelocityY * 0.7;
@@ -583,6 +845,13 @@ function drawPaddle(x, y, width, height, color, glowColor) {
 
 function onResults(results) {
     updateTrackingStatus(results);
+    const now = performance.now();
+    const frameDelta = lastFrameAt ? Math.min(Math.max(now - lastFrameAt, 0), 100) : 0;
+    lastFrameAt = now;
+    updateCountdown(now);
+    updateGameplayEffects(frameDelta);
+    const isRoundActive = matchState === MATCH_STATES.PLAYING && !countdown.active;
+
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
     drawArenaBackground(results);
@@ -599,7 +868,7 @@ function onResults(results) {
     let totalPaddleDx = (targetPointerX - currentPointerX) * SMOOTHING_FACTOR;
     let totalPaddleDy = (targetPointerY - currentPointerY) * SMOOTHING_FACTOR;
 
-    if (matchState === MATCH_STATES.PLAYING && ball.speed > ball.minSpeed) {
+    if (isRoundActive && ball.speed > ball.minSpeed) {
         ball.speed = Math.max(ball.minSpeed, ball.speed * 0.997);
         const currentVectorSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
         ball.vx = (ball.vx / currentVectorSpeed) * ball.speed;
@@ -608,8 +877,8 @@ function onResults(results) {
 
     let totalAiDx = 0;
     let totalAiDy = 0;
-    if (matchState === MATCH_STATES.PLAYING) {
-        const aiMovement = getAiMovement(performance.now());
+    if (isRoundActive) {
+        const aiMovement = getAiMovement(now);
         if (!isVertical) totalAiDy = aiMovement;
         else totalAiDx = aiMovement;
     }
@@ -629,13 +898,22 @@ function onResults(results) {
             ai.x = Math.max(ai.width / 2, Math.min(canvasElement.width - ai.width / 2, ai.x));
         }
 
-        if (matchState === MATCH_STATES.PLAYING) {
+        if (isRoundActive) {
             ball.x += ball.vx / SUBSTEPS;
             ball.y += ball.vy / SUBSTEPS;
 
             if (!isVertical) {
-                if (ball.y - ball.radius <= 0) { ball.vy = Math.abs(ball.vy); ball.y = ball.radius; sfx.wall(); }
-                else if (ball.y + ball.radius >= canvasElement.height) { ball.vy = -Math.abs(ball.vy); ball.y = canvasElement.height - ball.radius; sfx.wall(); }
+                if (ball.y - ball.radius <= 0) {
+                    ball.vy = Math.abs(ball.vy);
+                    ball.y = ball.radius;
+                    sfx.wall();
+                    spawnImpact(ball.x, ball.y, 'rgba(56, 189, 248, 0.9)', 0.75);
+                } else if (ball.y + ball.radius >= canvasElement.height) {
+                    ball.vy = -Math.abs(ball.vy);
+                    ball.y = canvasElement.height - ball.radius;
+                    sfx.wall();
+                    spawnImpact(ball.x, ball.y, 'rgba(56, 189, 248, 0.9)', 0.75);
+                }
 
                 if (ball.x < 0) {
                     awardPoint(isSwapped ? 'player' : 'ai');
@@ -645,8 +923,17 @@ function onResults(results) {
                     break;
                 }
             } else {
-                if (ball.x - ball.radius <= 0) { ball.vx = Math.abs(ball.vx); ball.x = ball.radius; sfx.wall(); }
-                else if (ball.x + ball.radius >= canvasElement.width) { ball.vx = -Math.abs(ball.vx); ball.x = canvasElement.width - ball.radius; sfx.wall(); }
+                if (ball.x - ball.radius <= 0) {
+                    ball.vx = Math.abs(ball.vx);
+                    ball.x = ball.radius;
+                    sfx.wall();
+                    spawnImpact(ball.x, ball.y, 'rgba(56, 189, 248, 0.9)', 0.75);
+                } else if (ball.x + ball.radius >= canvasElement.width) {
+                    ball.vx = -Math.abs(ball.vx);
+                    ball.x = canvasElement.width - ball.radius;
+                    sfx.wall();
+                    spawnImpact(ball.x, ball.y, 'rgba(56, 189, 248, 0.9)', 0.75);
+                }
 
                 if (ball.y < 0) {
                     awardPoint(isSwapped ? 'ai' : 'player');
@@ -657,10 +944,12 @@ function onResults(results) {
                 }
             }
 
-            handleRectCollision(currentPointerX, currentPointerY, player.width, player.height, totalPaddleDx, totalPaddleDy);
-            handleRectCollision(ai.x, ai.y, ai.width, ai.height, 0, 0);
+            handleRectCollision(currentPointerX, currentPointerY, player.width, player.height, totalPaddleDx, totalPaddleDy, 'rgba(56, 189, 248, 0.95)');
+            handleRectCollision(ai.x, ai.y, ai.width, ai.height, 0, 0, 'rgba(167, 139, 250, 0.95)');
         }
     }
+
+    if (isRoundActive) captureBallTrail();
 
     syncScoreboard();
 
@@ -677,6 +966,8 @@ function onResults(results) {
     canvasCtx.lineWidth = 1.5;
     canvasCtx.stroke();
     canvasCtx.setLineDash([]);
+
+    drawGameplayEffects();
 
     drawPaddle(currentPointerX, currentPointerY, player.width, player.height, '#38bdf8', 'rgba(56, 189, 248, 0.75)');
     drawPaddle(ai.x, ai.y, ai.width, ai.height, '#a78bfa', 'rgba(167, 139, 250, 0.68)');
@@ -699,6 +990,8 @@ function onResults(results) {
     const textMetrics = canvasCtx.measureText(aiText);
     canvasCtx.fillText(aiText, canvasElement.width - textMetrics.width - 24, 38);
 
+    drawCountdown();
+
     if (matchState === MATCH_STATES.IDLE || matchState === MATCH_STATES.PAUSED) {
         canvasCtx.fillStyle = 'rgba(5, 9, 20, 0.68)';
         canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
@@ -713,7 +1006,9 @@ function onResults(results) {
         canvasCtx.fillStyle = '#aab5c8';
         canvasCtx.fillText('Move your index finger to control the blue paddle', canvasElement.width / 2, canvasElement.height / 2 + 24);
         canvasCtx.fillText(
-            matchState === MATCH_STATES.IDLE ? "Press 'P' or Start when you're ready" : "Press 'P' or Resume to continue",
+            matchState === MATCH_STATES.IDLE
+                ? "Press 'P' or Start when you're ready"
+                : countdown.active ? 'Countdown will continue from this number' : "Press 'P' or Resume to continue",
             canvasElement.width / 2,
             canvasElement.height / 2 + 49
         );
@@ -727,6 +1022,7 @@ function onResults(results) {
 updatePaddleDimensions();
 resetBall();
 updateMatchSummary();
+syncAudioControl();
 setMatchState(MATCH_STATES.IDLE);
 
 function drawInitialCanvas(message = 'INITIALIZING SENSOR') {
