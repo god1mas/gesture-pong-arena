@@ -4,6 +4,12 @@ Gesture Pong Arena is an interactive, webcam-controlled Pong game. Move your ind
 
 The project uses **HTML**, **CSS**, **Vanilla JavaScript**, **HTML5 Canvas**, and **MediaPipe Hands**. Camera processing stays in the browser; the application does not record or upload webcam footage.
 
+## Live Demo
+
+Play the latest version at [https://god1mas.github.io/gesture-pong-arena/](https://god1mas.github.io/gesture-pong-arena/).
+
+For the most reliable camera and WebAssembly support, use a current version of **Google Chrome** or **Microsoft Edge**. Allow camera access when prompted.
+
 ## Features
 
 - Webcam-based paddle control using hand landmarks.
@@ -102,6 +108,14 @@ gesture-pong-arena/
 - Added bounded ball trails, paddle and wall impact effects, and scorer highlights.
 - Added an accessible mute control with a safely persisted browser preference.
 - Added score announcements without interfering with the match result overlay.
+
+## Known Limitations
+
+- A webcam and camera permission are required for gesture control.
+- An internet connection is required because MediaPipe Hands, its model files, and the interface font load from external HTTPS CDNs.
+- Camera availability and permission behavior depend on the browser, operating system, and whether another application is using the webcam.
+- Browser autoplay policies require a user interaction before Web Audio effects can begin.
+- Chrome and Edge are the recommended browsers; behavior in other browsers may vary.
 
 ## Credits and Attribution
 
